@@ -17,3 +17,12 @@ declare module '*.svg' {
   const value: React.StatelessComponent<React.SVGAttributes<SVGElement>>;
   export default value;
 }
+
+declare module 'react-scroll-percentage' {
+  export function useScrollPercentage(options?: {
+    root?: Element | null;
+    rootMargin?: string;
+    threshold?: number;
+    triggerOnce?: boolean;
+  }): [React.RefCallback<Element>, number, IntersectionObserverEntry | undefined];
+}

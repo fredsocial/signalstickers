@@ -78,7 +78,7 @@ export interface SearchFactoryOptions<T> {
    * See: https://fusejs.io/examples.html#nested-search
    */
   keys: {
-    [key: string]: Fuse.FuseOptionKey;
+    [key: string]: Fuse.FuseOptionKey<T>;
   };
 }
 
