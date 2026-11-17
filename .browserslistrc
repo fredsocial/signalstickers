@@ -1,6 +1,8 @@
 # Browsers that we support
 defaults
 Firefox ESR
+Safari >= 13
+iOS >= 13
 not IE 11
 not IE_Mob 11
 maintained node versions

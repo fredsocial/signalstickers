@@ -95,3 +95,6 @@ typings/
 
 # Cache directory for FetchStickerDataPlugin.
 /.sticker-pack-cache
+
+# Isolated offline validation output (never deploy).
+dist-fixture/

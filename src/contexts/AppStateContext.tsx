@@ -77,16 +77,13 @@ export const Provider = (props: React.PropsWithChildren<Record<string, unknown>>
 
   const [state, dispatch] = React.useReducer(reducer, initialState, initializer);
 
-  // N.B. There seems to be a parsing error with TSX + arrow functions that use
-  // generic type parameters. Re-visit in the future.
-  // eslint-disable-next-line prefer-arrow/prefer-arrow-functions
-  function useAppState<T = any>(key: string) {
+  const useAppState = <T = any,>(key: string) => {
     const setState: React.Dispatch<React.SetStateAction<T>> = (value: React.SetStateAction<T>) => {
       dispatch({key, value});
     };
 
     return [state[key], setState] as any;
-  }
+  };
 
   return (
     <Context.Provider value={useAppState}>

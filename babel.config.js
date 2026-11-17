@@ -1,16 +1,16 @@
 module.exports = {
-  extends: '@darkobits/ts-unified/dist/config/babel',
   presets: [
-    ['@babel/preset-env', {
-      useBuiltIns: 'entry',
-      corejs: 3
-    }],
+    ['@babel/preset-env', { modules: 'auto', useBuiltIns: 'entry', corejs: 3, loose: true }],
+    ['@babel/preset-react', { runtime: 'classic' }],
+    '@babel/preset-typescript',
     require.resolve('linaria/babel')
   ],
   plugins: [
+    ['@babel/plugin-proposal-decorators', { legacy: true }],
+    ['@babel/plugin-transform-class-properties', { loose: true }],
+    '@babel/plugin-transform-runtime',
+    ['module-resolver', {root: ['./src']}],
     'react-hot-loader/babel'
   ],
-  // Ensures Webpack comments are not prematurely removed by Babel. Comments
-  // will still be stripped by the minifier in production builds.
   comments: true
 };

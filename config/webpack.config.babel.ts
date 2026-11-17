@@ -1,20 +1,16 @@
 import path from 'path';
 
-import * as R from 'ramda';
 import webpack from 'webpack';
 
 // Plugins.
 import FetchStickerDataPlugin from '@signalstickers/fetch-sticker-data-webpack-plugin';
-import { CleanWebpackPlugin } from 'clean-webpack-plugin';
 import CopyWebpackPlugin from 'copy-webpack-plugin';
 import FaviconsWebpackPlugin from 'favicons-webpack-plugin';
-import { FaviconWebpackPlugionOptions } from 'favicons-webpack-plugin/src/options';
 import ForkTsCheckerWebpackPlugin from 'fork-ts-checker-webpack-plugin';
-import FriendlyErrorsWebpackPlugin from 'friendly-errors-webpack-plugin';
 import HtmlWebpackPlugin from 'html-webpack-plugin';
 import MiniCssExtractPlugin from 'mini-css-extract-plugin';
-// @ts-expect-error No declarations exist for this plugin.
-import PreloadWebpackPlugin from 'preload-webpack-plugin';
+import HomePreloadPlugin from './home-preload-plugin';
+import type { Configuration as DevServerConfiguration } from 'webpack-dev-server';
 import { BundleAnalyzerPlugin } from 'webpack-bundle-analyzer';
 
 
@@ -24,8 +20,9 @@ import { BundleAnalyzerPlugin } from 'webpack-bundle-analyzer';
 const PKG_ROOT = path.resolve(__dirname, '..');
 
 
-export default (env: string, argv: any): webpack.Configuration => {
-  const config: webpack.Configuration = {};
+export default (env: {analyze?: boolean; fixture?: boolean} = {}, argv: any): webpack.Configuration => {
+  const config: webpack.Configuration & {devServer?: DevServerConfiguration} = {};
+  config.target = ['web', 'es2019'];
   config.module = {rules: []};
   config.plugins = [];
 
@@ -47,16 +44,17 @@ export default (env: string, argv: any): webpack.Configuration => {
   };
 
   config.output = {
-    path: path.resolve(PKG_ROOT, 'dist'),
+    path: path.resolve(PKG_ROOT, env.fixture ? 'dist-fixture' : 'dist'),
     filename: argv.mode === 'production' ? '[name]-[chunkhash].js' : '[name].js',
-    chunkFilename: '[name]-[chunkhash].js'
+    chunkFilename: '[name]-[chunkhash].js',
+    clean: argv.mode === 'production'
   };
 
 
   // ----- Loaders -------------------------------------------------------------
 
   // TypeScript & JavaScript files.
-  config.module.rules.push({
+  config.module.rules!.push({
     test: /\.(ts|tsx|js|jsx)$/,
     exclude: /node_modules/,
     use: [{
@@ -72,8 +70,28 @@ export default (env: string, argv: any): webpack.Configuration => {
     }]
   });
 
+  // query-string 10's security-fixed decoder uses Unicode-set regex syntax.
+  // Compile these dependencies for older Safari before minifying the gallery.
+  const queryDirectory = path.dirname(require.resolve('query-string'));
+  config.module.rules!.push({
+    test: /\.m?js$/,
+    include: [
+      queryDirectory,
+      path.dirname(require.resolve('filter-obj', {paths: [queryDirectory]})),
+      path.dirname(require.resolve('split-on-first', {paths: [queryDirectory]}))
+    ],
+    use: [{
+      loader: 'babel-loader',
+      options: {
+        babelrc: false,
+        configFile: false,
+        presets: [['@babel/preset-env', {targets: {safari: '13', ios: '13'}, modules: false}]]
+      }
+    }]
+  });
+
   // Stylesheets.
-  config.module.rules.push({
+  config.module.rules!.push({
     test: /\.css$/,
     use: [{
       loader: MiniCssExtractPlugin.loader
@@ -86,15 +104,16 @@ export default (env: string, argv: any): webpack.Configuration => {
   });
 
   // SVG.
-  config.module.rules.push({
+  config.module.rules!.push({
     test: /\.svg$/,
     use: [{
-      loader: '@svgr/webpack'
+      loader: '@svgr/webpack',
+      options: {jsxRuntime: 'classic'}
     }]
   });
 
   // Other images.
-  config.module.rules.push({
+  config.module.rules!.push({
     test: /\.(png|jpg|gif)$/,
     use: [{
       loader: 'url-loader',
@@ -106,7 +125,7 @@ export default (env: string, argv: any): webpack.Configuration => {
   });
 
   // Text files.
-  config.module.rules.push({
+  config.module.rules!.push({
     test: /\.txt$/,
     use: [{
       loader: 'raw-loader'
@@ -114,7 +133,7 @@ export default (env: string, argv: any): webpack.Configuration => {
   });
 
   // Fonts.
-  config.module.rules.push({
+  config.module.rules!.push({
     test: /\.(woff2?|eot|ttf|otf)(\?.*)?$/,
     use: [{
       loader: 'url-loader',
@@ -125,13 +144,11 @@ export default (env: string, argv: any): webpack.Configuration => {
   });
 
   // Modernizr.
-  config.module.rules.push({
+  config.module.rules!.push({
     type: 'javascript/auto',
     test: /modernizr-config\.json?$/,
     use: [{
-      loader: 'modernizr-loader'
-    }, {
-      loader: 'json-loader'
+      loader: path.resolve(PKG_ROOT, 'config/modernizr-loader.cjs')
     }]
   });
 
@@ -139,6 +156,7 @@ export default (env: string, argv: any): webpack.Configuration => {
   // ----- Module Resolution ---------------------------------------------------
 
   config.resolve = {
+    modules: [path.resolve(PKG_ROOT, 'src'), 'node_modules'],
     alias: {
       // This tells Webpack to load our Modernizr configuration file whenever we
       // import a module named 'modernizr'. The loader rule above will then
@@ -156,7 +174,8 @@ export default (env: string, argv: any): webpack.Configuration => {
 
   // ----- Icons ---------------------------------------------------------------
 
-  const iconsBaseConfig: Partial<FaviconWebpackPlugionOptions> = {
+  const iconsBaseConfig: Exclude<ConstructorParameters<typeof FaviconsWebpackPlugin>[0], string> = {
+    logo: '',
     mode: 'webapp',
     inject: true,
     prefix: 'icons/',
@@ -170,51 +189,46 @@ export default (env: string, argv: any): webpack.Configuration => {
         android: false,
         appleIcon: false,
         appleStartup: false,
-        coast: false,
         favicons: false,
-        firefox: false,
         windows: false,
-        yandex: false
+        yandex: false,
       }
     }
   };
 
   // Favicons.
-  config.plugins.push(new FaviconsWebpackPlugin(R.mergeDeepRight(iconsBaseConfig, {
+  config.plugins.push(new FaviconsWebpackPlugin({...iconsBaseConfig,
     logo: path.resolve(PKG_ROOT, 'src', 'assets', 'favicon.png'),
-    favicons: {
-      icons: {
+    prefix: 'icons/favicon/',
+    favicons: {...iconsBaseConfig.favicons,
+      icons: {...iconsBaseConfig.favicons?.icons,
         favicons: true,
-        firefox: true,
-        coast: true,
-        yandex: true
       }
     }
-  })));
+  }));
 
   // App icon.
-  config.plugins.push(new FaviconsWebpackPlugin(R.mergeDeepRight(iconsBaseConfig, {
+  config.plugins.push(new FaviconsWebpackPlugin({...iconsBaseConfig,
     logo: path.resolve(PKG_ROOT, 'src', 'assets', 'app-icon.png'),
-    favicons: {
-      icons: {
+    prefix: 'icons/app/',
+    favicons: {...iconsBaseConfig.favicons,
+      icons: {...iconsBaseConfig.favicons?.icons,
         appleIcon: true,
         android: true
       }
     }
-  })));
+  }));
 
   // Apple startup splash screen.
-  config.plugins.push(new FaviconsWebpackPlugin(R.mergeDeepRight(iconsBaseConfig, {
+  config.plugins.push(new FaviconsWebpackPlugin({...iconsBaseConfig,
     logo: path.resolve(PKG_ROOT, 'src', 'assets', 'launch-screen.png'),
-    favicons: {
-      icons: {
-        appleStartup: {
-          // N.B. This is derived from Bootstrap's default 'primary' color.
-          background: '#007BFF'
-        }
+    prefix: 'icons/startup/',
+    favicons: {...iconsBaseConfig.favicons, background: '#007BFF',
+      icons: {...iconsBaseConfig.favicons?.icons,
+        appleStartup: true
       }
     }
-  })));
+  }));
 
 
   // ----- Plugins -------------------------------------------------------------
@@ -227,9 +241,7 @@ export default (env: string, argv: any): webpack.Configuration => {
 
   // Add resource hints to preload assets used in the initial chunk. This plugin
   // must be added after html-webpack-plugin.
-  config.plugins.push(new PreloadWebpackPlugin({
-    include: ['home']
-  }));
+  config.plugins.push(new HomePreloadPlugin());
 
   config.plugins.push(new MiniCssExtractPlugin({
     filename: argv.mode === 'production' ? '[name]-[contenthash].css' : 'styles.css'
@@ -240,7 +252,7 @@ export default (env: string, argv: any): webpack.Configuration => {
   }));
 
   config.plugins.push(new FetchStickerDataPlugin({
-    inputFile: path.resolve(PKG_ROOT, 'stickers.yml'),
+    inputFile: path.resolve(PKG_ROOT, env.fixture ? 'tests/fixtures/stickers.yml' : 'stickers.yml'),
     outputFile: 'stickerData.json'
   }));
 
@@ -248,32 +260,19 @@ export default (env: string, argv: any): webpack.Configuration => {
     'process.env.NODE_ENV': JSON.stringify(argv.mode)
   }));
 
-  if (argv.mode === 'development') {
-    config.plugins.push(new FriendlyErrorsWebpackPlugin());
-  }
-
   if (argv.mode === 'production') {
-    // Delete the build output directory before production builds.
-    config.plugins.push(new CleanWebpackPlugin());
-
     config.plugins.push(new CopyWebpackPlugin({
       patterns: [{
         // When performing a production build, instruct Webpack to copy all
         // files in the 'static' directory into the build directory.
         from: path.resolve(PKG_ROOT, 'static'),
-        to: path.resolve(PKG_ROOT, 'dist')
+        to: '.'
       }]
     }));
 
-    // This runs ESLint and TypeScript as separate processes, dramatically
-    // speeding-up build times.
+    // TypeScript also checks production compilation; NPS runs ESLint first.
     config.plugins.push(new ForkTsCheckerWebpackPlugin({
-      eslint: {
-        enabled: true,
-        files: './src/**/*.{ts,tsx,js,jsx}'
-      },
       typescript: {
-        enabled: true,
         diagnosticOptions: {
           semantic: true,
           syntactic: true
@@ -281,7 +280,7 @@ export default (env: string, argv: any): webpack.Configuration => {
       }
     }));
 
-    if (argv.analyze) {
+    if (env.analyze) {
       console.log('Performing bundle analysis. Bundle report will be opened in your default browser.');
       config.plugins.push(new BundleAnalyzerPlugin({
         analyzerMode: 'static',
@@ -300,28 +299,18 @@ export default (env: string, argv: any): webpack.Configuration => {
       port: 8080,
       compress: true,
       historyApiFallback: true,
-      disableHostCheck: true,
-      host: '0.0.0.0',
+      host: '127.0.0.1',
       hot: true,
-      inline: true,
-      overlay: true,
-      quiet: true
+      client: {overlay: true}
     };
   }
 
 
   // ----- Misc ----------------------------------------------------------------
 
-  config.node = {
-    setImmediate: false,
-    dgram: 'empty',
-    fs: 'empty',
-    net: 'empty',
-    tls: 'empty',
-    child_process: 'empty'
-  };
+  config.resolve.fallback = {dgram: false, fs: false, net: false, tls: false, child_process: false};
 
-  config.devtool = argv.mode === 'development' ? '#eval-source-map' : '#source-map';
+  config.devtool = argv.mode === 'development' ? 'eval-source-map' : 'source-map';
 
   config.optimization = {
     minimize: argv.mode === 'production',

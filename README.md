@@ -96,5 +96,46 @@ code.
 The stickers were added [by the community](https://github.com/signalstickers/signalstickers/graphs/contributors).
 Most of stickers from Telegram were ported by [@signal-stickers](https://github.com/signal-stickers).
 
+## Developing this fork
+
+Use Node.js 22.12 or newer. The unpublished `@darkobits/ts-unified`
+wrapper has been replaced by explicit Babel, TypeScript, ESLint, Jest and NPS
+configuration. React 16, Linaria 2, Signal links and the catalog format remain.
+Local lint configuration retains the former type-aware rules, mapping removed
+names and options to their current equivalents. Linaria uses its supported
+extractor because the old shaker drops exports emitted by modern Babel. A
+local Modernizr loader replaces Webpack's removed `loader.exec` API.
+
+```sh
+npm ci --ignore-scripts
+npm test
+npm run build:fixture
+npm start
+```
+
+The fixture build compiles the production gallery using two synthetic cached
+manifests, blocks network requests, and checks catalog order and home-chunk
+preloads. Every emitted script must also parse as ES2019. The security-fixed
+query-string decoder is transpiled for Safari/iOS 13 to preserve the older
+browser path. The build writes **`dist-fixture/`**, which must never be published. Tests
+exercise authenticated manifest/image decryption in browser and Node clients,
+reject modified MACs and malformed protobuf, and check search/filter queries.
+For local browser checks, `node config/serve-fixture.cjs` serves that output on
+`http://127.0.0.1:8088`, redirecting Signal requests and analytics to local test
+responses. The normal development server uses `127.0.0.1:8080` with host checks.
+
+`npm run build` builds the real `stickers.yml` catalog into **`dist/`**, using
+`.sticker-pack-cache/` and fetching missing public manifests from Signal.
+CI runs tests and the offline build on every push and pull request. This fork
+currently has no configured Pages site or deployment key, so its existing
+upstream publishing job is gated by `ENABLE_PAGES_DEPLOY=true`. It only accepts
+a real `dist/` build; validation cannot upload or publish fixtures. The publisher requires a configured Pages site and
+`GH_PAGES_DEPLOY_KEY` before enabling it. Both artifact actions use version 4,
+and only the downloaded production build is passed to the publisher. No public website is created by validation.
+
+Keep the previous source revision and lockfile for rollback. Restore those
+files, reinstall with `npm ci --ignore-scripts`, and rebuild the real catalog
+before republishing. Do not clear the public-manifest cache unintentionally.
+
 ## License
 See [LICENSE.md](LICENSE.md).

@@ -1,12 +1,44 @@
 {
-  "extends": "./node_modules/@darkobits/ts-unified/dist/config/tsconfig.json",
   "compilerOptions": {
     "baseUrl": ".",
     "jsx": "react",
-    "lib": ["DOM", "es2020"],
-    "paths": {"*": ["*", "src/*"]},
+    "lib": [
+      "DOM",
+      "es2020"
+    ],
+    "paths": {
+      "*": [
+        "*",
+        "src/*"
+      ]
+    },
     "plugins": [
-      {"name": "typescript-styled-plugin"}
-    ]
-  }
+      {
+        "name": "typescript-styled-plugin"
+      }
+    ],
+    "target": "ES2019",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "strict": true,
+    "noImplicitAny": true,
+    "noUnusedLocals": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "downlevelIteration": true,
+    "resolveJsonModule": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "useUnknownInCatchVariables": false,
+    "skipLibCheck": true
+  },
+  "include": [
+    "src",
+    "tests",
+    "config"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }
